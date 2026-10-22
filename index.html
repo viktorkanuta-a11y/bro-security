@@ -1383,18 +1383,32 @@ setTimeout(function(){ (function (d, w, k, o, g) { var n=d.getElementsByTagName(
       if (!String(req[i].value || '').trim()) { notice('Заполните обязательные поля.'); return; }
     }
 
-    var data = new FormData(form);
-    data.delete('formservices[]');
-    // BRO-FS-V4: служебные поля Тильды не шлём; ловушку Тильды превращаем в _gotcha Formspree
-    var trap = data.get('form-spec-comments');
-    data.delete('form-spec-comments');
-    data.set('_gotcha', (trap && trap !== 'Its good') ? trap : '');
-    if (tel && tel.name) {
-      data.set(tel.name, '+' + (digits.length === 10 ? '7' + digits : digits));
-    }
-    Array.from(data.keys()).forEach(function (k) { if (k.indexOf('tildaspec-') === 0) { data.delete(k); } });
+    var raw = new FormData(form);
+    // BRO-FS-V5: письмо с понятными названиями и порядком полей
+    var trap = raw.get('form-spec-comments');
+    var LABELS = { 'Name': 'Имя', 'Phone': 'Телефон', 'Input': 'Компания', 'Опишите задачу': 'Задача',
+      'a': 'Количество охранников', 'b': 'Режим работы', 'c': 'Стоимость 1 часа работы, ₽ (по расчёту)' };
+    var ORDER = ['Услуга', 'Количество охранников', 'Режим работы', 'Стоимость 1 часа работы, ₽ (по расчёту)',
+      'Имя', 'Компания', 'Задача', 'Телефон'];
+    var pairs = {};
+    raw.forEach(function (v, k) {
+      if (k === 'formservices[]' || k === 'form-spec-comments' || k.indexOf('tildaspec-') === 0) { return; }
+      v = String(v);
+      if (k === 'b') { v = v.replace(/\s*=\s*\d+\s*$/, ''); }
+      v = v.trim();
+      if (!v) { return; }
+      pairs[LABELS[k] || k] = v;
+    });
+    var data = new FormData();
+    data.append('_gotcha', (trap && trap !== 'Its good') ? trap : '');
     var svc = form.querySelector('input[name="Услуга"]');
-    data.append('_subject', 'Заявка с сайта bro-security.ru' + (svc && svc.value ? ' — ' + svc.value : ''));
+    var btnTxt = form.querySelector('button[type="submit"]');
+    var topic = (svc && svc.value) ? svc.value
+      : (form.querySelector('input[name="c"]') ? 'Калькулятор охраны'
+      : (btnTxt ? btnTxt.textContent.trim() : ''));
+    data.append('_subject', 'Заявка с сайта bro-security.ru' + (topic ? ' — ' + topic : ''));
+    ORDER.forEach(function (k) { if (pairs[k]) { data.append(k, pairs[k]); delete pairs[k]; } });
+    Object.keys(pairs).forEach(function (k) { data.append(k, pairs[k]); });
     data.append('Страница', location.href);
 
     var btn = form.querySelector('button[type="submit"]');
